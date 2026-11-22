@@ -1,6 +1,8 @@
 import os
 import time
-from flask import Flask, render_template, jsonify, request
+import io
+import csv
+from flask import Flask, render_template, jsonify, request, Response
 from feed_parser import fetch_and_parse_feed
 
 app = Flask(__name__)
@@ -49,6 +51,57 @@ def get_feed():
             "status": "error",
             "message": f"Unable to fetch BigQuery release notes: {str(e)}"
         }), 502
+
+
+@app.route("/api/export-csv")
+def export_csv():
+    category = request.args.get("category", "All")
+    query = request.args.get("q", "").strip().lower()
+
+    if not _cache["data"]:
+        try:
+            _cache["data"] = fetch_and_parse_feed()
+            _cache["timestamp"] = time.time()
+        except Exception as e:
+            return jsonify({"status": "error", "message": str(e)}), 502
+
+    updates = _cache["data"].get("updates", [])
+    filtered = []
+    for item in updates:
+        if category != "All" and item.get("category") != category:
+            continue
+        if query:
+            summary = item.get("summary", "").lower()
+            date_title = item.get("entry_title", "").lower()
+            cat = item.get("category", "").lower()
+            if query not in summary and query not in date_title and query not in cat:
+                continue
+        filtered.append(item)
+
+    output = io.StringIO()
+    # Write UTF-8 BOM for Microsoft Excel compatibility
+    output.write("\ufeff")
+    writer = csv.writer(output, quoting=csv.QUOTE_ALL)
+    writer.writerow(["Date", "Category", "Summary", "Link", "Tweet Draft"])
+
+    for item in filtered:
+        writer.writerow([
+            item.get("entry_title", ""),
+            item.get("category", ""),
+            item.get("summary", ""),
+            item.get("entry_link", ""),
+            item.get("tweet_text", "")
+        ])
+
+    output.seek(0)
+    return Response(
+        output.getvalue(),
+        mimetype="text/csv",
+        headers={
+            "Content-Disposition": "attachment; filename=bigquery-release-notes.csv",
+            "Content-Type": "text/csv; charset=utf-8"
+        }
+    )
 
 
 if __name__ == "__main__":

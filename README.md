@@ -8,6 +8,15 @@ A lightweight, responsive web application built with **Python Flask** and **plai
 
 - **Live Atom Feed Ingestion**: Connects directly to `https://docs.cloud.google.com/feeds/bigquery-release-notes.xml` to parse release dates, update categories, formatted content, and reference documentation links.
 - **Refresh Button with Spinner**: One-click refresh with animated SVG/CSS spinner to reload and fetch the latest feed data on demand, with in-memory caching to prevent excessive upstream polling.
+- **Copy Card to Clipboard ('Copy to clipboard')**:
+  - Each release update card features a dedicated **"Copy to clipboard"** button.
+  - Copies structured card content (Category, Release Date, Summary, and Documentation URL) directly to your clipboard with one click.
+  - Features real-time visual feedback ("✓ Copied!" state and toast alerts) and safe clipboard API fallback.
+- **Export to CSV ('Export to CSV')**:
+  - Download the current contents of the page directly into a `.csv` file via the **"Export to CSV"** button located in the header and toolbar.
+  - Dynamic client-side export reflects active search queries and category filters.
+  - Encoded with UTF-8 BOM (`\uFEFF`) and RFC 4180 standard escaping for seamless compatibility with Microsoft Excel, LibreOffice, and Google Sheets.
+  - Also supported via dedicated backend endpoint `/api/export-csv`.
 - **Select & Tweet Any Update**:
   - Click on any update card or the **"Select to Tweet"** button to load the update into the sticky **Tweet Composer**.
   - Automatically formats a tweet draft with the update category, summary, date, link, and hashtags.
@@ -81,3 +90,6 @@ http://127.0.0.1:5000
 - `GET /`: Serves the web application interface.
 - `GET /api/feed`: Returns parsed BigQuery release notes in JSON format.
   - `?refresh=true`: Forces a fresh re-fetch bypassing the in-memory cache.
+- `GET /api/export-csv`: Generates and downloads release notes directly as a CSV file.
+  - `?category=<category>`: (Optional) Filters updates by category (e.g. `Feature`, `Security`, `Breaking`).
+  - `?q=<search>`: (Optional) Filters updates matching a search term.

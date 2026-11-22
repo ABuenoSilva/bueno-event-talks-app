@@ -19,6 +19,8 @@ document.addEventListener("DOMContentLoaded", () => {
   const refreshBtn = document.getElementById("refreshBtn");
   const refreshSpinner = document.getElementById("refreshSpinner");
   const refreshBtnText = document.getElementById("refreshBtnText");
+  const exportCsvBtn = document.getElementById("exportCsvBtn");
+  const exportCsvStatsBtn = document.getElementById("exportCsvStatsBtn");
   const statusText = document.getElementById("statusText");
   const searchInput = document.getElementById("searchInput");
   const clearSearchBtn = document.getElementById("clearSearchBtn");
@@ -247,6 +249,13 @@ document.addEventListener("DOMContentLoaded", () => {
           <div class="card-top">
             <span class="category-tag ${catClass}">${escapeHtml(item.category)}</span>
             <div class="card-actions-top">
+              <button class="copy-card-btn" data-id="${item.id}" title="Copy card content to clipboard">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="btn-icon">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span>Copy to clipboard</span>
+              </button>
               <button class="select-btn" data-id="${item.id}" title="Select this update to tweet">
                 ${isSelected ? "✓ Selected" : "Select to Tweet"}
               </button>
@@ -277,6 +286,14 @@ document.addEventListener("DOMContentLoaded", () => {
           // If clicked a link inside card body, let browser navigate
           if (e.target.closest("a")) return;
           
+          // If clicked copy-card button, copy card content
+          if (e.target.closest(".copy-card-btn")) {
+            e.stopPropagation();
+            const copyBtn = e.target.closest(".copy-card-btn");
+            copyCardContent(item, copyBtn);
+            return;
+          }
+
           // If clicked quick-tweet button, select and open intent
           if (e.target.closest(".quick-tweet-btn")) {
             e.stopPropagation();
@@ -509,6 +526,108 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // Clear Selection Button
   clearSelectionBtn.addEventListener("click", deselectUpdate);
+
+  // Export to CSV Buttons
+  if (exportCsvBtn) {
+    exportCsvBtn.addEventListener("click", exportToCsv);
+  }
+  if (exportCsvStatsBtn) {
+    exportCsvStatsBtn.addEventListener("click", exportToCsv);
+  }
+
+  /**
+   * Copies card content to the user's clipboard
+   */
+  async function copyCardContent(item, btn) {
+    const lines = [
+      `[${item.category}] ${item.entry_title}`,
+      "",
+      item.summary
+    ];
+    if (item.entry_link) {
+      lines.push("", `Link: ${item.entry_link}`);
+    }
+    const textToCopy = lines.join("\n");
+
+    try {
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        await navigator.clipboard.writeText(textToCopy);
+      } else {
+        const textarea = document.createElement("textarea");
+        textarea.value = textToCopy;
+        textarea.style.position = "fixed";
+        textarea.style.left = "-9999px";
+        document.body.appendChild(textarea);
+        textarea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textarea);
+      }
+
+      if (btn) {
+        btn.classList.add("copied");
+        const span = btn.querySelector("span");
+        const originalText = span ? span.textContent : "Copy to clipboard";
+        if (span) span.textContent = "Copied!";
+        setTimeout(() => {
+          btn.classList.remove("copied");
+          if (span) span.textContent = originalText;
+        }, 2000);
+      }
+
+      showToast("Card content copied to clipboard!", "success");
+    } catch (err) {
+      console.error("Failed to copy card content:", err);
+      showToast("Failed to copy to clipboard", "error");
+    }
+  }
+
+  /**
+   * Exports the current contents of the page to a .csv file
+   */
+  function exportToCsv() {
+    const items = getFilteredUpdates();
+    if (!items || items.length === 0) {
+      showToast("No updates to export", "error");
+      return;
+    }
+
+    const headers = ["Date", "Category", "Summary", "Link", "Tweet Draft"];
+    const escapeCsv = (val) => {
+      if (val === null || val === undefined) return '""';
+      const str = String(val).replace(/"/g, '""');
+      return `"${str}"`;
+    };
+
+    const rows = items.map(item => [
+      escapeCsv(item.entry_title),
+      escapeCsv(item.category),
+      escapeCsv(item.summary),
+      escapeCsv(item.entry_link),
+      escapeCsv(item.tweet_text)
+    ]);
+
+    // Prepend UTF-8 BOM for Microsoft Excel compatibility
+    const csvContent = "\uFEFF" + [
+      headers.map(escapeCsv).join(","),
+      ...rows.map(r => r.join(","))
+    ].join("\r\n");
+
+    const blob = new Blob([csvContent], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const dateStr = new Date().toISOString().split("T")[0];
+    const filename = `bigquery-release-notes-${dateStr}.csv`;
+
+    const downloadLink = document.createElement("a");
+    downloadLink.setAttribute("href", url);
+    downloadLink.setAttribute("download", filename);
+    downloadLink.style.display = "none";
+    document.body.appendChild(downloadLink);
+    downloadLink.click();
+    document.body.removeChild(downloadLink);
+    URL.revokeObjectURL(url);
+
+    showToast(`Exported ${items.length} update${items.length === 1 ? "" : "s"} to CSV!`, "success");
+  }
 
   // Initial Fetch on Page Load
   fetchFeed(false);
